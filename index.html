@@ -1,0 +1,489 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f8efe5">
+  <link rel="icon" href="data:,">
+  <title>蹭蹭</title>
+  <style>
+    :root {
+      --bg: #f8efe5;
+      --ink: #2f2824;
+      --muted: #7d6d63;
+      --panel: rgba(255, 252, 247, 0.82);
+      --line: rgba(89, 65, 48, 0.16);
+      --accent: #ff7f9a;
+      --accent-dark: #e85d7e;
+      --fish: #f5a33b;
+      --cell-w: 192px;
+      --cell-h: 208px;
+      --scale: min(1.42, calc((100vw - 34px) / 192));
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 22% 12%, rgba(255, 180, 141, 0.38), transparent 28%),
+        radial-gradient(circle at 82% 18%, rgba(255, 225, 136, 0.34), transparent 24%),
+        linear-gradient(180deg, #fff7ef 0%, var(--bg) 58%, #f3dfce 100%);
+      overflow: hidden;
+    }
+
+    body {
+      min-height: 100svh;
+      display: grid;
+      place-items: stretch;
+    }
+
+    .game {
+      position: relative;
+      width: min(100vw, 520px);
+      min-height: 100svh;
+      margin: 0 auto;
+      padding: max(18px, env(safe-area-inset-top)) 18px max(18px, env(safe-area-inset-bottom));
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: 14px;
+      isolation: isolate;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .title h1 {
+      margin: 0;
+      font-size: 34px;
+      line-height: 1;
+      letter-spacing: 0;
+    }
+
+    .title p {
+      margin: 7px 0 0;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.35;
+    }
+
+    .score {
+      min-width: 78px;
+      padding: 9px 11px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      text-align: center;
+      box-shadow: 0 10px 26px rgba(105, 72, 50, 0.08);
+      backdrop-filter: blur(12px);
+    }
+
+    .score strong {
+      display: block;
+      color: var(--accent-dark);
+      font-size: 26px;
+      line-height: 1;
+    }
+
+    .score span {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .stage {
+      position: relative;
+      min-height: 0;
+      display: grid;
+      place-items: center;
+      padding: 4px 0 0;
+    }
+
+    .cat-pad {
+      position: relative;
+      width: calc(var(--cell-w) * var(--scale));
+      height: calc(var(--cell-h) * var(--scale));
+      display: grid;
+      place-items: center;
+      touch-action: none;
+    }
+
+    .cat {
+      width: var(--cell-w);
+      height: var(--cell-h);
+      background-image: url("assets/cengceng-spritesheet.webp");
+      background-repeat: no-repeat;
+      background-size: 1536px 1872px;
+      background-position: calc(var(--frame, 0) * -192px) calc(var(--row, 0) * -208px);
+      image-rendering: auto;
+      transform: scale(var(--scale));
+      transform-origin: center;
+      filter: drop-shadow(0 22px 26px rgba(82, 55, 36, 0.18));
+      cursor: pointer;
+      transition: transform 140ms ease, filter 160ms ease;
+    }
+
+    .cat-pad:active .cat,
+    .cat.is-petting {
+      transform: scale(calc(var(--scale) * 1.035)) translateY(-3px);
+      filter: drop-shadow(0 26px 30px rgba(82, 55, 36, 0.2));
+    }
+
+    .bubble {
+      position: absolute;
+      left: 50%;
+      top: -18px;
+      z-index: 2;
+      min-width: 118px;
+      transform: translateX(-50%);
+      padding: 9px 13px;
+      border: 1px solid rgba(255, 127, 154, 0.28);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.82);
+      color: #8b4455;
+      text-align: center;
+      font-size: 14px;
+      font-weight: 700;
+      box-shadow: 0 10px 20px rgba(105, 72, 50, 0.1);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 180ms ease, transform 180ms ease;
+    }
+
+    .bubble.show {
+      opacity: 1;
+      transform: translate(-50%, -8px);
+    }
+
+    .heart {
+      position: absolute;
+      left: var(--x);
+      top: var(--y);
+      color: var(--accent);
+      font-size: 24px;
+      font-weight: 900;
+      pointer-events: none;
+      animation: float-heart 860ms ease-out forwards;
+      text-shadow: 0 2px 8px rgba(232, 93, 126, 0.22);
+    }
+
+    @keyframes float-heart {
+      from {
+        opacity: 0;
+        transform: translate(-50%, -20%) scale(0.72);
+      }
+      16% {
+        opacity: 1;
+      }
+      to {
+        opacity: 0;
+        transform: translate(-50%, -92px) scale(1.24);
+      }
+    }
+
+    .controls {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: 0 16px 38px rgba(105, 72, 50, 0.12);
+      backdrop-filter: blur(16px);
+      padding: 14px;
+      display: grid;
+      gap: 13px;
+    }
+
+    .mood {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.35;
+    }
+
+    .mood strong {
+      color: var(--ink);
+      font-size: 16px;
+    }
+
+    .meter {
+      height: 13px;
+      border-radius: 999px;
+      background: rgba(95, 70, 50, 0.12);
+      overflow: hidden;
+    }
+
+    .meter span {
+      display: block;
+      width: var(--love, 18%);
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #ff9fb2, #ff6f90 58%, #f5a33b);
+      transition: width 220ms ease;
+    }
+
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    button {
+      min-height: 48px;
+      border: 0;
+      border-radius: 8px;
+      color: #fff;
+      font: inherit;
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 0;
+      box-shadow: 0 12px 22px rgba(105, 72, 50, 0.14);
+      cursor: pointer;
+    }
+
+    .pet-button {
+      background: linear-gradient(180deg, #ff8da5, var(--accent-dark));
+    }
+
+    .fish-button {
+      background: linear-gradient(180deg, #ffbe62, var(--fish));
+    }
+
+    button:active {
+      transform: translateY(1px);
+      box-shadow: 0 8px 16px rgba(105, 72, 50, 0.12);
+    }
+
+    .mini {
+      min-height: 34px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+      text-align: center;
+    }
+
+    @media (max-height: 680px) {
+      .title h1 {
+        font-size: 28px;
+      }
+
+      .title p {
+        margin-top: 5px;
+        font-size: 13px;
+      }
+
+      .controls {
+        padding: 12px;
+        gap: 10px;
+      }
+
+      button {
+        min-height: 44px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="game" aria-label="蹭蹭互动游戏">
+    <header class="topbar">
+      <div class="title">
+        <h1>蹭蹭</h1>
+        <p>摸摸它，它会开心</p>
+      </div>
+      <div class="score" aria-live="polite">
+        <strong id="score">0</strong>
+        <span>爱心</span>
+      </div>
+    </header>
+
+    <section class="stage">
+      <div class="cat-pad" id="catPad" aria-label="摸摸蹭蹭">
+        <div class="bubble" id="bubble">呼噜呼噜</div>
+        <div class="cat" id="cat" role="img" aria-label="蹭蹭"></div>
+      </div>
+    </section>
+
+    <section class="controls">
+      <div class="mood">
+        <strong id="mood">有点想被摸摸</strong>
+        <span id="hint">点一下蹭蹭</span>
+      </div>
+      <div class="meter" aria-label="蹭蹭开心值">
+        <span id="meter"></span>
+      </div>
+      <div class="actions">
+        <button class="pet-button" id="petButton" type="button">摸摸</button>
+        <button class="fish-button" id="fishButton" type="button">小鱼干</button>
+      </div>
+      <div class="mini">连续摸摸会让蹭蹭进入呼噜模式。</div>
+    </section>
+  </main>
+
+  <script>
+    const states = {
+      idle: { row: 0, frames: 6, speed: 260 },
+      runRight: { row: 1, frames: 8, speed: 105 },
+      runLeft: { row: 2, frames: 8, speed: 105 },
+      waving: { row: 3, frames: 4, speed: 150 },
+      jumping: { row: 4, frames: 5, speed: 135 },
+      failed: { row: 5, frames: 8, speed: 180 },
+      waiting: { row: 6, frames: 6, speed: 250 },
+      running: { row: 7, frames: 6, speed: 135 },
+      review: { row: 8, frames: 6, speed: 170 }
+    };
+
+    const cat = document.getElementById("cat");
+    const catPad = document.getElementById("catPad");
+    const bubble = document.getElementById("bubble");
+    const score = document.getElementById("score");
+    const meter = document.getElementById("meter");
+    const mood = document.getElementById("mood");
+    const hint = document.getElementById("hint");
+    const petButton = document.getElementById("petButton");
+    const fishButton = document.getElementById("fishButton");
+
+    let current = "idle";
+    let frame = 0;
+    let love = 0;
+    let lastTouch = Date.now();
+    let dragActive = false;
+    let lastDragReward = 0;
+    let lockUntil = 0;
+
+    function setState(name, lockMs = 0) {
+      if (Date.now() < lockUntil && name !== current) return;
+      current = name;
+      frame = 0;
+      lockUntil = lockMs ? Date.now() + lockMs : 0;
+      renderFrame();
+    }
+
+    function renderFrame() {
+      const state = states[current];
+      cat.style.setProperty("--row", state.row);
+      cat.style.setProperty("--frame", frame % state.frames);
+    }
+
+    function updateMood() {
+      score.textContent = love;
+      meter.style.setProperty("--love", `${Math.min(100, 18 + love * 4)}%`);
+
+      if (love >= 20) {
+        mood.textContent = "蹭蹭已经被哄好了";
+        hint.textContent = "继续摸也可以";
+      } else if (love >= 10) {
+        mood.textContent = "正在呼噜呼噜";
+        hint.textContent = "它开始黏人了";
+      } else if (love >= 4) {
+        mood.textContent = "有点开心";
+        hint.textContent = "再摸几下";
+      } else {
+        mood.textContent = "有点想被摸摸";
+        hint.textContent = "点一下蹭蹭";
+      }
+    }
+
+    function showBubble(text) {
+      bubble.textContent = text;
+      bubble.classList.add("show");
+      window.clearTimeout(showBubble.timer);
+      showBubble.timer = window.setTimeout(() => bubble.classList.remove("show"), 760);
+    }
+
+    function addHeart(x, y) {
+      const rect = catPad.getBoundingClientRect();
+      const heart = document.createElement("div");
+      heart.className = "heart";
+      heart.textContent = "♥";
+      heart.style.setProperty("--x", `${x - rect.left}px`);
+      heart.style.setProperty("--y", `${y - rect.top}px`);
+      catPad.appendChild(heart);
+      window.setTimeout(() => heart.remove(), 900);
+    }
+
+    function reward(amount, stateName, text, event) {
+      love = Math.min(24, love + amount);
+      lastTouch = Date.now();
+      updateMood();
+      showBubble(text);
+      setState(stateName, 820);
+      const rect = catPad.getBoundingClientRect();
+      addHeart(event?.clientX ?? rect.left + rect.width / 2, event?.clientY ?? rect.top + rect.height / 2);
+      cat.classList.add("is-petting");
+      window.setTimeout(() => cat.classList.remove("is-petting"), 180);
+    }
+
+    function pet(event) {
+      reward(1, love % 3 === 0 ? "waving" : "review", "呼噜呼噜", event);
+    }
+
+    function feed(event) {
+      reward(3, "jumping", "小鱼干！", event);
+    }
+
+    catPad.addEventListener("pointerdown", (event) => {
+      dragActive = true;
+      lastDragReward = 0;
+      catPad.setPointerCapture(event.pointerId);
+      pet(event);
+    });
+
+    catPad.addEventListener("pointermove", (event) => {
+      if (!dragActive) return;
+      const now = Date.now();
+      if (now - lastDragReward < 180) return;
+      lastDragReward = now;
+      reward(1, "running", "呼噜呼噜", event);
+    });
+
+    function endDrag(event) {
+      if (!dragActive) return;
+      dragActive = false;
+      try {
+        catPad.releasePointerCapture(event.pointerId);
+      } catch {
+        // Pointer capture may already be gone on Safari after cancellation.
+      }
+      setState("review", 620);
+    }
+
+    catPad.addEventListener("pointerup", endDrag);
+    catPad.addEventListener("pointercancel", endDrag);
+    petButton.addEventListener("click", pet);
+    fishButton.addEventListener("click", feed);
+
+    window.setInterval(() => {
+      const state = states[current];
+      frame = (frame + 1) % state.frames;
+      renderFrame();
+    }, 120);
+
+    window.setInterval(() => {
+      if (Date.now() < lockUntil || dragActive) return;
+      const quietFor = Date.now() - lastTouch;
+      if (quietFor > 9500) {
+        setState("waiting");
+      } else if (quietFor > 2600) {
+        setState("idle");
+      }
+    }, 700);
+
+    updateMood();
+    renderFrame();
+  </script>
+</body>
+</html>
