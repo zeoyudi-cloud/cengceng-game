@@ -225,8 +225,40 @@
       font-size: 16px;
     }
 
+    .care-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .care-item {
+      min-width: 0;
+      padding: 9px 8px;
+      border: 1px solid rgba(89, 65, 48, 0.12);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.54);
+    }
+
+    .care-label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 4px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1;
+      white-space: nowrap;
+    }
+
+    .care-label strong {
+      color: var(--ink);
+      font-size: 13px;
+      line-height: 1;
+    }
+
     .meter {
-      height: 13px;
+      height: 8px;
+      margin-top: 8px;
       border-radius: 999px;
       background: rgba(95, 70, 50, 0.12);
       overflow: hidden;
@@ -234,17 +266,25 @@
 
     .meter span {
       display: block;
-      width: var(--love, 18%);
+      width: var(--value, 18%);
       height: 100%;
       border-radius: inherit;
       background: linear-gradient(90deg, #ff9fb2, #ff6f90 58%, #f5a33b);
       transition: width 220ms ease;
     }
 
+    .meter.hunger span {
+      background: linear-gradient(90deg, #ffd27c, #f5a33b);
+    }
+
+    .meter.energy span {
+      background: linear-gradient(90deg, #a9dcff, #78a7ff);
+    }
+
     .actions {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
     }
 
     button {
@@ -266,6 +306,17 @@
 
     .fish-button {
       background: linear-gradient(180deg, #ffbe62, var(--fish));
+    }
+
+    .sleep-button {
+      background: linear-gradient(180deg, #8fb8ff, #6f82df);
+    }
+
+    button:disabled {
+      color: rgba(255, 255, 255, 0.78);
+      background: linear-gradient(180deg, #c9beb5, #aaa097);
+      box-shadow: none;
+      cursor: default;
     }
 
     button:active {
@@ -307,7 +358,7 @@
     <header class="topbar">
       <div class="title">
         <h1>蹭蹭</h1>
-        <p>摸摸它，它会开心</p>
+        <p>摸摸它，喂它小鱼干</p>
       </div>
       <div class="score" aria-live="polite">
         <strong id="score">0</strong>
@@ -327,14 +378,26 @@
         <strong id="mood">有点想被摸摸</strong>
         <span id="hint">点一下蹭蹭</span>
       </div>
-      <div class="meter" aria-label="蹭蹭开心值">
-        <span id="meter"></span>
+      <div class="care-grid" aria-label="蹭蹭状态">
+        <div class="care-item">
+          <div class="care-label"><span>亲密</span><strong id="loveValue">0</strong></div>
+          <div class="meter love" aria-label="亲密度"><span id="loveMeter"></span></div>
+        </div>
+        <div class="care-item">
+          <div class="care-label"><span>饱腹</span><strong id="hungerValue">80</strong></div>
+          <div class="meter hunger" aria-label="饱腹感"><span id="hungerMeter"></span></div>
+        </div>
+        <div class="care-item">
+          <div class="care-label"><span>精神</span><strong id="energyValue">80</strong></div>
+          <div class="meter energy" aria-label="精神值"><span id="energyMeter"></span></div>
+        </div>
       </div>
       <div class="actions">
         <button class="pet-button" id="petButton" type="button">摸摸</button>
         <button class="fish-button" id="fishButton" type="button">小鱼干</button>
+        <button class="sleep-button" id="sleepButton" type="button">睡觉</button>
       </div>
-      <div class="mini">连续摸摸会让蹭蹭进入呼噜模式。</div>
+      <div class="mini" id="mini">每天来照顾一下蹭蹭，它会记得你。</div>
     </section>
   </main>
 
@@ -355,19 +418,41 @@
     const catPad = document.getElementById("catPad");
     const bubble = document.getElementById("bubble");
     const score = document.getElementById("score");
-    const meter = document.getElementById("meter");
+    const loveValue = document.getElementById("loveValue");
+    const hungerValue = document.getElementById("hungerValue");
+    const energyValue = document.getElementById("energyValue");
+    const loveMeter = document.getElementById("loveMeter");
+    const hungerMeter = document.getElementById("hungerMeter");
+    const energyMeter = document.getElementById("energyMeter");
     const mood = document.getElementById("mood");
     const hint = document.getElementById("hint");
+    const mini = document.getElementById("mini");
     const petButton = document.getElementById("petButton");
     const fishButton = document.getElementById("fishButton");
+    const sleepButton = document.getElementById("sleepButton");
+
+    const STORAGE_KEY = "cengceng-care-v1";
+    const FISH_COOLDOWN_MS = 18000;
+
+    const lines = {
+      daily: ["今天也来看蹭蹭啦", "蹭蹭听见你来了", "今天的小猫已上线", "蹭蹭伸了个懒腰"],
+      happy: ["呼噜呼噜", "再摸一下", "蹭蹭开心了", "它开始黏人了"],
+      hungry: ["好像有点馋", "想吃小鱼干", "肚肚在提醒你", "喂一口就更开心"],
+      sleepy: ["有点困困", "想趴一会儿", "眼皮开始打架", "适合睡个小觉"],
+      fish: ["小鱼干！", "咔嚓咔嚓", "这口很满意", "蹭蹭收下啦"],
+      sleep: ["睡一小会儿", "开始团成一团", "呼吸变慢了", "充电中"],
+      cooldown: ["刚吃过啦", "等一下再喂", "小鱼干要慢慢吃"],
+      low: ["轻轻摸摸它", "它想被哄一下", "蹭蹭看着你"]
+    };
 
     let current = "idle";
     let frame = 0;
-    let love = 0;
+    let care = loadCare();
     let lastTouch = Date.now();
     let dragActive = false;
     let lastDragReward = 0;
     let lockUntil = 0;
+    let saveTimer = 0;
 
     function setState(name, lockMs = 0) {
       if (Date.now() < lockUntil && name !== current) return;
@@ -383,22 +468,107 @@
       cat.style.setProperty("--frame", frame % state.frames);
     }
 
-    function updateMood() {
-      score.textContent = love;
-      meter.style.setProperty("--love", `${Math.min(100, 18 + love * 4)}%`);
+    function todayKey() {
+      return new Date().toISOString().slice(0, 10);
+    }
 
-      if (love >= 20) {
-        mood.textContent = "蹭蹭已经被哄好了";
-        hint.textContent = "继续摸也可以";
-      } else if (love >= 10) {
+    function clamp(value) {
+      return Math.max(0, Math.min(100, Math.round(value)));
+    }
+
+    function pick(list) {
+      return list[Math.floor(Math.random() * list.length)];
+    }
+
+    function loadCare() {
+      const fallback = {
+        version: 1,
+        love: 0,
+        hunger: 80,
+        energy: 80,
+        lastSeenAt: Date.now(),
+        lastDailyAt: "",
+        fishCooldownUntil: 0
+      };
+
+      try {
+        const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY));
+        return applyOfflineCare({ ...fallback, ...parsed });
+      } catch {
+        return fallback;
+      }
+    }
+
+    function applyOfflineCare(nextCare) {
+      const now = Date.now();
+      const elapsedHours = Math.max(0, (now - Number(nextCare.lastSeenAt || now)) / 3600000);
+      if (elapsedHours < 0.5) {
+        nextCare.lastSeenAt = now;
+        return nextCare;
+      }
+
+      nextCare.hunger = Math.max(24, clamp(nextCare.hunger - Math.min(18, elapsedHours * 2)));
+      nextCare.energy = Math.max(22, clamp(nextCare.energy - Math.min(12, elapsedHours)));
+      nextCare.lastSeenAt = now;
+      return nextCare;
+    }
+
+    function saveCare() {
+      care.lastSeenAt = Date.now();
+      window.clearTimeout(saveTimer);
+      saveTimer = window.setTimeout(() => {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(care));
+        } catch {
+          // Saving is a nice-to-have; the game should still work in private mode.
+        }
+      }, 120);
+    }
+
+    function changeCare(delta) {
+      care.love = clamp(care.love + (delta.love || 0));
+      care.hunger = clamp(care.hunger + (delta.hunger || 0));
+      care.energy = clamp(care.energy + (delta.energy || 0));
+      updateMood();
+      saveCare();
+    }
+
+    function syncButtonState() {
+      const remaining = Math.max(0, care.fishCooldownUntil - Date.now());
+      fishButton.disabled = remaining > 0;
+      fishButton.textContent = remaining > 0 ? `小鱼干 ${Math.ceil(remaining / 1000)}s` : "小鱼干";
+    }
+
+    function updateMood() {
+      score.textContent = care.love;
+      loveValue.textContent = care.love;
+      hungerValue.textContent = care.hunger;
+      energyValue.textContent = care.energy;
+      loveMeter.style.setProperty("--value", `${care.love}%`);
+      hungerMeter.style.setProperty("--value", `${care.hunger}%`);
+      energyMeter.style.setProperty("--value", `${care.energy}%`);
+      syncButtonState();
+
+      if (care.hunger < 35) {
+        mood.textContent = "有点想吃小鱼干";
+        hint.textContent = "喂一下会开心";
+        mini.textContent = pick(lines.hungry);
+      } else if (care.energy < 30) {
+        mood.textContent = "蹭蹭有点困";
+        hint.textContent = "让它睡一会儿";
+        mini.textContent = pick(lines.sleepy);
+      } else if (care.love >= 70) {
+        mood.textContent = "蹭蹭超黏你";
+        hint.textContent = "今天也很亲";
+        mini.textContent = "亲密度会保存在这台手机里。";
+      } else if (care.love >= 30) {
         mood.textContent = "正在呼噜呼噜";
         hint.textContent = "它开始黏人了";
-      } else if (love >= 4) {
-        mood.textContent = "有点开心";
-        hint.textContent = "再摸几下";
+        mini.textContent = "连续摸摸会让蹭蹭进入呼噜模式。";
       } else {
         mood.textContent = "有点想被摸摸";
         hint.textContent = "点一下蹭蹭";
+        mini.textContent = pick(lines.low);
       }
     }
 
@@ -420,10 +590,9 @@
       window.setTimeout(() => heart.remove(), 900);
     }
 
-    function reward(amount, stateName, text, event) {
-      love = Math.min(24, love + amount);
+    function reward(delta, stateName, text, event) {
       lastTouch = Date.now();
-      updateMood();
+      changeCare(delta);
       showBubble(text);
       setState(stateName, 820);
       const rect = catPad.getBoundingClientRect();
@@ -433,11 +602,22 @@
     }
 
     function pet(event) {
-      reward(1, love % 3 === 0 ? "waving" : "review", "呼噜呼噜", event);
+      reward({ love: 1, energy: -2 }, care.love % 3 === 0 ? "waving" : "review", pick(lines.happy), event);
     }
 
     function feed(event) {
-      reward(3, "jumping", "小鱼干！", event);
+      if (Date.now() < care.fishCooldownUntil) {
+        showBubble(pick(lines.cooldown));
+        return;
+      }
+
+      care.fishCooldownUntil = Date.now() + FISH_COOLDOWN_MS;
+      reward({ love: 1, hunger: 20, energy: 2 }, "jumping", pick(lines.fish), event);
+    }
+
+    function sleep(event) {
+      reward({ energy: 24, hunger: -2 }, "waiting", pick(lines.sleep), event);
+      window.setTimeout(() => setState("idle"), 1000);
     }
 
     catPad.addEventListener("pointerdown", (event) => {
@@ -452,7 +632,7 @@
       const now = Date.now();
       if (now - lastDragReward < 180) return;
       lastDragReward = now;
-      reward(1, "running", "呼噜呼噜", event);
+      reward({ love: 1, energy: -1 }, "running", pick(lines.happy), event);
     });
 
     function endDrag(event) {
@@ -470,6 +650,13 @@
     catPad.addEventListener("pointercancel", endDrag);
     petButton.addEventListener("click", pet);
     fishButton.addEventListener("click", feed);
+    sleepButton.addEventListener("click", sleep);
+    window.addEventListener("beforeunload", () => {
+      try {
+        care.lastSeenAt = Date.now();
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(care));
+      } catch {}
+    });
 
     window.setInterval(() => {
       const state = states[current];
@@ -480,12 +667,20 @@
     window.setInterval(() => {
       if (Date.now() < lockUntil || dragActive) return;
       const quietFor = Date.now() - lastTouch;
-      if (quietFor > 9500) {
+      if (care.energy < 25 || quietFor > 9500) {
         setState("waiting");
       } else if (quietFor > 2600) {
         setState("idle");
       }
     }, 700);
+
+    window.setInterval(syncButtonState, 500);
+
+    if (care.lastDailyAt !== todayKey()) {
+      care.lastDailyAt = todayKey();
+      showBubble(pick(lines.daily));
+      saveCare();
+    }
 
     updateMood();
     renderFrame();
